@@ -2,10 +2,16 @@
 ## Домашнее задание
 ### Уровень: Base
 
->после занятия вы сможете:
->перечислить виды RAID массивов и их отличия;
->получить информацию о дисковой подсистеме на любом сервере с ОС Linux;
->собрать программный рейд и восстановить его после сбоя.
+* добавить в Vagrantfile еще дисков
+* собрать R0/R5/R10 на выбор
+* прописать собранный рейд в конф, чтобы рейд собирался при загрузке
+* сломать/починить raid
+* создать GPT  раздел и 5 партиций и смонтировать их на диск.
+В качестве проверки принимаются - измененный Vagrantfile, скрипт для 
+создания рейда, конф для автосборки рейда при загрузке.
+* Доп. задание - Vagrantfile, который сразу собирает систему с подключенным 
+рейдом
+
 
 ## Рабочее окружение:
 * Windows 10.0.18362
@@ -16,11 +22,11 @@
 
 **Приглашение командной строки хостовой системы выглядит так:**
 
-```$```
+`$`
 
 **Приглашение командной строки гостевой системы выглядит так:**
 
-```vagrant@$```
+`vagrant@$`
 
 ## Подготовка
 1. Клонирую Vagrantfile из репозитория https://github.com/erlong15/otus-linux
@@ -34,7 +40,7 @@
 
 3. Просмотр наличия блочных устройств
 
-```vagrant@$ sudo lsblk```
+`vagrant@$ sudo lsblk`
 
 >NAME   MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
 >sda      8:0    0   40G  0 disk
@@ -49,7 +55,7 @@
 
 4. Пробую занулить суперблоки на неразмеченных дисках:
 
-```vagrant@$ sudo mdadm --zero-superblock --force /dev/sd{b,c,d,e,f}```
+`vagrant@$ sudo mdadm --zero-superblock --force /dev/sd{b,c,d,e,f}`
 
 > mdadm: Unrecognised md component device - /dev/sdb
 > mdadm: Unrecognised md component device - /dev/sdc
@@ -61,7 +67,7 @@
 
 5. Создаю рейд
 
-```vagrant@$ mdadm --create --verbose /dev/md0 -l 6 -n 5 /dev/sd{b,c,d,e,f}```
+`vagrant@$ sudo mdadm --create --verbose /dev/md0 -l 6 -n 5 /dev/sd{b,c,d,e,f}`
 
 >mdadm: layout defaults to left-symmetric
 >mdadm: layout defaults to left-symmetric
@@ -72,7 +78,7 @@
 
 6. Проверяю результат
 
-```vagrant@$ sudo /proc/mdstat```
+`vagrant@$ sudo /proc/mdstat`
 
 >Personalities : [raid6] [raid5] [raid4]
 >md0 : active raid6 sdf[4] sde[3] sdd[2] sdc[1] sdb[0]
@@ -82,7 +88,7 @@
 
 Убеждаюсь, что уровень рейда - 6 и все пять дисков включены - [5/5] [UUUUU], выясняю, что размер чанка = 512k
 
-```vagrant@$ sudo mdadm -D /dev/md0```
+`vagrant@$ sudo mdadm -D /dev/md0`
 
 >/dev/md0:
 >           Version : 1.2
@@ -119,51 +125,26 @@
 
 7. Создаю файл mdadm.conf и проверяю его содержимое
 
-```vagrant@$ sudo su```
-```vagrant@# mkdir /etc/mdadm```
-```vagrant@#  echo "DEVICE partitions" > /etc/mdadm/mdadm.conf```
-```vagrant@#  mdadm --detail --scan --verbose | awk '/ARRAY/ {print}' >> /etc/mdadm/mdadm.conf```
-```vagrant@$ cat /etc/mdadm/mdadm.conf```
+`vagrant@$ sudo su`
+
+`vagrant@# mkdir /etc/mdadm`
+
+`vagrant@#  echo "DEVICE partitions" > /etc/mdadm/mdadm.conf`
+
+`vagrant@#  mdadm --detail --scan --verbose | awk '/ARRAY/ {print}' >> /etc/mdadm/mdadm.conf`
+
+`vagrant@$ cat /etc/mdadm/mdadm.conf`
 
 >DEVICE partitions
 >ARRAY /dev/md0 level=raid6 num-devices=5 metadata=1.2 name=otuslinux:0 UUID=e4041632:2c346a4d:a1555caa:1d1c4ad5
 
-8. Создаю фаловую систему на новом объеме, монтирую в каталог /var/raid, копирую в нее рекурсивно директорию /home
+8. Ломаю массив, искуственно переводя в статус "fail" один из дисков, проверяю статус массива:
 
-```vagrant@# mkfs.ext4 /dev/md0```
-
->mke2fs 1.42.9 (28-Dec-2013)
->Filesystem label=
->OS type: Linux
->Block size=4096 (log=2)
->Fragment size=4096 (log=2)
->Stride=128 blocks, Stripe width=384 blocks
->47616 inodes, 190464 blocks
->9523 blocks (5.00%) reserved for the super user
->First data block=0
->Maximum filesystem blocks=195035136
->6 block groups
->32768 blocks per group, 32768 fragments per group
->7936 inodes per group
->Superblock backups stored on blocks:
->        32768, 98304, 163840
->
->Allocating group tables: done
->Writing inode tables: done
->Creating journal (4096 blocks): done
->Writing superblocks and filesystem accounting information: done
-
-```vagrant@# mkdir /var/raid```
-```vagrant@# mount /dev/md0 /var/raid```
-```vagrant@# cp -r /home /var/raid```
-
-9. Ломаю массив, искуственно переводя в статус "fail" один из дисков, проверяю статус массива и возможность обращения к данным:
-
-```vagrant@# mdadm /dev/md0 --fail /dev/sdc```
+`vagrant@# mdadm /dev/md0 --fail /dev/sdc`
 
 >mdadm: set /dev/sdc faulty in /dev/md0
 
-```vagrant@# cat /proc/mdstat```
+`vagrant@# cat /proc/mdstat`
 
 >Personalities : [raid6] [raid5] [raid4]
 >md0 : active raid6 sde[5] sdf[4] sdd[2] sdc[1](F) sdb[0]
@@ -171,32 +152,33 @@
 >
 >unused devices: <none>
 
- ```vagrant@#  cat /var/raid/home/vagrant/.bash_logout```
+9. Восстанавливаю рейд, сначала удалив диск из массива, а затем "вставив" его же назад
  
- ># ~/.bash_logout
- 
- 10. Восстанавливаю рейд, сначала удалив диск из массива, а затем "вставив" его же назад
- 
- ```vagrant@# mdadm --remove /dev/md0 /dev/sdc```
+ `vagrant@# mdadm --remove /dev/md0 /dev/sdc`
  
  > mdadm: hot removed /dev/sdc from /dev/md0
  
- ```vagrant@# mdadm --add /dev/md0 /dev/sdc```
+ `vagrant@# mdadm --add /dev/md0 /dev/sdc`
  
  > mdadm: added /dev/sdc
  
- Несмотря на совершенно несущественный объем занятого пространства, процесс rebuild проходил около минуты.
+ Несмотря на несмотря на отсутствие данных, процесс rebuild проходил около минуты.
  
-11. После того как перестроение массива завершилось, размонтирую /dev/md0 и создаю на нем gpt раздел, на нем четыре партиции, создаю на них файловую систему, смотрю вывод lsblk и монтирую их по каталогам
+10. После того как перестроение массива завершилось, размонтирую /dev/md0 и создаю на нем gpt раздел, в разделе четыре партиции, создаю на них файловую систему, смотрю вывод lsblk и монтирую их по каталогам
 
-```vagrant@# umount /dev/md0```
-```vagrant@# parted -s /dev/md0 mklabel gpt```
-```vagrant@# parted /dev/md0 mkpart primary ext4 0% 25%```
-```vagrant@# parted /dev/md0 mkpart primary ext4 25% 50%```
-```vagrant@# parted /dev/md0 mkpart primary ext4 50% 75%```
-```vagrant@# parted /dev/md0 mkpart primary ext4 75% 100%```
+`vagrant@# umount /dev/md0`
 
-```vagrant@# lsblk```
+`vagrant@# parted -s /dev/md0 mklabel gpt`
+
+`vagrant@# parted /dev/md0 mkpart primary ext4 0% 25%`
+
+`vagrant@# parted /dev/md0 mkpart primary ext4 25% 50%`
+
+`vagrant@# parted /dev/md0 mkpart primary ext4 50% 75%`
+
+`vagrant@# parted /dev/md0 mkpart primary ext4 75% 100%`
+
+`vagrant@# lsblk`
 
 >NAME    MAJ:MIN RM   SIZE RO TYPE  MOUNTPOINT
 >md0       9:0    0   744M  0 raid6
@@ -207,4 +189,69 @@
 >sda       8:0    0    40G  0 disk
 >`-sda1    8:1    0    40G  0 part  /
 
+11. Добавляю следующие строки в Vagrantfile в секцию box.vm.provision, делаю vagrant reload --provision, проверяю
 
+>mdadm --zero-superblock --force /dev/sd{b,c,d,e,f}
+>mdadm --create --verbose /dev/md0 -l 6 -n 5 /dev/sd{b,c,d,e,f}
+>mkdir /etc/mdadm
+>echo "DEVICE partitions" > /etc/mdadm/mdadm.conf
+>mdadm --detail --scan --verbose | awk '/ARRAY/ {print}' >> /etc/mdadm/mdadm.conf
+
+>parted -s /dev/md0 mklabel gpt
+>parted /dev/md0 mkpart primary ext4 0% 25%
+>parted /dev/md0 mkpart primary ext4 25% 50%
+>parted /dev/md0 mkpart primary ext4 50% 75%
+>parted /dev/md0 mkpart primary ext4 75% 100%
+>for i in $(seq 1 4); do sudo mkfs.ext4 /dev/md0p$i; done
+>mkdir -p /raid/part{1,2,3,4}
+>for i in $(seq 1 4); do mount /dev/md0p$i /raid/part$i; done
+
+`vagrant@# cat /proc/mdstat`
+
+>Personalities : [raid6] [raid5] [raid4]
+>md0 : active raid6 sdf[4] sde[3] sdd[2] sdc[1] sdb[0]
+>      761856 blocks super 1.2 level 6, 512k chunk, algorithm 2 [5/5] [UUUUU]
+>
+>unused devices: <none>
+
+`vagrant@# lsblk`
+
+>NAME      MAJ:MIN RM   SIZE RO TYPE  MOUNTPOINT
+>sda         8:0    0    40G  0 disk
+>`-sda1      8:1    0    40G  0 part  /
+>sdb         8:16   0   250M  0 disk
+>`-md0       9:0    0   744M  0 raid6
+>  |-md0p1 259:0    0 184.5M  0 md    /raid/part1
+>  |-md0p2 259:1    0   186M  0 md    /raid/part2
+>  |-md0p3 259:2    0   186M  0 md    /raid/part3
+>  `-md0p4 259:3    0 184.5M  0 md    /raid/part4
+>sdc         8:32   0   250M  0 disk
+>`-md0       9:0    0   744M  0 raid6
+>  |-md0p1 259:0    0 184.5M  0 md    /raid/part1
+>  |-md0p2 259:1    0   186M  0 md    /raid/part2
+>  |-md0p3 259:2    0   186M  0 md    /raid/part3
+>  `-md0p4 259:3    0 184.5M  0 md    /raid/part4
+>sdd         8:48   0   250M  0 disk
+>`-md0       9:0    0   744M  0 raid6
+>  |-md0p1 259:0    0 184.5M  0 md    /raid/part1
+>  |-md0p2 259:1    0   186M  0 md    /raid/part2
+>  |-md0p3 259:2    0   186M  0 md    /raid/part3
+>  `-md0p4 259:3    0 184.5M  0 md    /raid/part4
+>sde         8:64   0   250M  0 disk
+>`-md0       9:0    0   744M  0 raid6
+>  |-md0p1 259:0    0 184.5M  0 md    /raid/part1
+>  |-md0p2 259:1    0   186M  0 md    /raid/part2
+>  |-md0p3 259:2    0   186M  0 md    /raid/part3
+>  `-md0p4 259:3    0 184.5M  0 md    /raid/part4
+>sdf         8:80   0   250M  0 disk
+>`-md0       9:0    0   744M  0 raid6
+>  |-md0p1 259:0    0 184.5M  0 md    /raid/part1
+>  |-md0p2 259:1    0   186M  0 md    /raid/part2
+>  |-md0p3 259:2    0   186M  0 md    /raid/part3
+>  `-md0p4 259:3    0 184.5M  0 md    /raid/part4
+
+12. Итого отработано:
+* создание массива
+* поломка и последующее восстановление массива
+* массив разбит на разделы
+* обе процедуры автоматизированы через Vagrantfile
